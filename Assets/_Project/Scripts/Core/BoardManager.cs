@@ -10,6 +10,9 @@ public class BoardManager : MonoBehaviour
     public GameObject blockPrefab;
     public Color[] colors;
 
+    [Header("Board Layout")]
+    public float spacing = 1.1f;
+
     // Dinamik ikon eşikleri
     public int A = 3;
     public int B = 5;
@@ -38,16 +41,54 @@ public class BoardManager : MonoBehaviour
             return;
         }
 
+        // Clean up stray editor-created components or children showing placeholder blocks
+        foreach (Transform child in transform)
+        {
+            if (child.name == "BoardManager.cs" || (child.name != "_Pool" && child.GetComponent<SpriteRenderer>() != null))
+            {
+                Destroy(child.gameObject);
+            }
+        }
+
+        // Setup colors fallback if empty or all transparent
+        bool needsColors = false;
         if (colors == null || colors.Length == 0)
         {
-            Debug.LogError("Colors array is EMPTY. Set Colors Size > 0 in Inspector!");
-            return;
+            needsColors = true;
+        }
+        else
+        {
+            bool allTransparent = true;
+            foreach (var col in colors)
+            {
+                if (col.a > 0.05f)
+                {
+                    allTransparent = false;
+                    break;
+                }
+            }
+            if (allTransparent) needsColors = true;
+        }
+
+        if (needsColors)
+        {
+            Debug.Log("BoardManager: Colors array was empty or transparent. Setting premium fallback colors.");
+            colors = new Color[]
+            {
+                new Color(0.96f, 0.44f, 0.44f, 1f), // Coral/Salmon
+                new Color(0.24f, 0.70f, 0.73f, 1f), // Soft Teal
+                new Color(0.98f, 0.74f, 0.18f, 1f), // Golden Yellow
+                new Color(0.66f, 0.48f, 0.81f, 1f), // Orchid Purple
+                new Color(0.38f, 0.80f, 0.62f, 1f), // Mint Green
+                new Color(0.30f, 0.59f, 0.90f, 1f)  // Sky Blue
+            };
         }
 
         InitPool();
         PrewarmPool(prewarmPoolCount);
 
         CreateBoard();
+        AdjustCamera();
         AfterBoardSettled();
     }
 
@@ -174,9 +215,39 @@ public class BoardManager : MonoBehaviour
         Debug.Log("Board created!");
     }
 
+    Vector2 GetTileWorldPosition(int x, int y)
+    {
+        return new Vector2(x * spacing, y * spacing);
+    }
+
+    void AdjustCamera()
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            Debug.LogWarning("AdjustCamera: Main Camera not found!");
+            return;
+        }
+
+        // Calculate visual bounds of the grid
+        float boardWidth = (columns - 1) * spacing;
+        float boardHeight = (rows - 1) * spacing;
+
+        // Position camera to point directly at the center of the board
+        Vector3 center = new Vector3(boardWidth / 2f, boardHeight / 2f, cam.transform.position.z);
+        cam.transform.position = center;
+
+        // Dynamic orthographic size calculation to frame the entire board
+        float margin = 1.0f;
+        float heightRequired = (boardHeight + 2f * margin) / 2f;
+        float widthRequired = (boardWidth + 2f * margin) / (2f * cam.aspect);
+
+        cam.orthographicSize = Mathf.Max(heightRequired, widthRequired);
+    }
+
     void SpawnTileAt(int x, int y)
     {
-        Vector2 pos = new Vector2(x * 1.1f, y * 1.1f);
+        Vector2 pos = GetTileWorldPosition(x, y);
         GameObject go = PoolGet(pos);
 
         Tile tile = go.GetComponent<Tile>();
@@ -233,7 +304,7 @@ public class BoardManager : MonoBehaviour
 
                         t.x = x;
                         t.y = writeY;
-                        t.transform.position = new Vector2(x, writeY);
+                        t.transform.position = GetTileWorldPosition(x, writeY);
                     }
                     writeY++;
                 }
